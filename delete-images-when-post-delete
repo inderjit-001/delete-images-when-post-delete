@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: Delete Post Images on Post Delete
-Description: Deletes all images associated with a post or specific custom post types when the post is deleted.
+Description: Deletes all images associated with a post or specific custom post types when the post is deleted. Settings -> Delete post images -> Select post types
 Version: 1.1
 Author: Inderjit Singh
 */
