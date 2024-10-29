@@ -1,0 +1,152 @@
+<?php
+/*
+Plugin Name: Delete Post Images on Post Delete
+Description: Deletes all images associated with a post or specific custom post types when the post is deleted.
+Version: 1.1
+Author: Inderjit Singh
+*/
+
+// Prevent direct access to the file
+if (! defined('ABSPATH')) {
+    exit;
+}
+
+class Delete_Post_Images_On_Delete
+{
+
+    // Option name for storing enabled post types
+    private $option_name = 'delete_post_images_enabled_post_types';
+
+    // Constructor to initialize the plugin
+    public function __construct()
+    {
+        // Register settings page and settings
+        add_action('admin_menu', array($this, 'add_settings_page'));
+        add_action('admin_init', array($this, 'register_settings'));
+
+        // Hook into post delete action
+        add_action('before_delete_post', array($this, 'delete_images_on_post_delete'));
+    }
+
+    // Function to add settings page under "Settings"
+    public function add_settings_page()
+    {
+        add_options_page(
+            'Delete Post Images Settings',
+            'Delete Post Images',
+            'manage_options',
+            'delete-post-images-settings',
+            array($this, 'render_settings_page')
+        );
+    }
+
+    // Render settings page HTML
+    public function render_settings_page()
+    {
+?>
+<div class="wrap">
+    <h1>Delete Post Images Settings</h1>
+    <form method="post" action="options.php">
+        <?php
+                settings_fields('delete_post_images_settings_group');
+                do_settings_sections('delete-post-images-settings');
+                submit_button();
+                ?>
+    </form>
+</div>
+<?php
+    }
+
+    // Register settings and settings fields
+    public function register_settings()
+    {
+        register_setting('delete_post_images_settings_group', $this->option_name);
+
+        add_settings_section(
+            'delete_post_images_main_section',
+            'Select Post Types for Image Deletion',
+            null,
+            'delete-post-images-settings'
+        );
+
+        // Get all public post types
+        $post_types = get_post_types(array('public' => true), 'objects');
+        $enabled_post_types = get_option($this->option_name, array());
+
+        foreach ($post_types as $post_type) {
+            add_settings_field(
+                'delete_post_images_' . $post_type->name,
+                $post_type->label,
+                array($this, 'render_checkbox_field'),
+                'delete-post-images-settings',
+                'delete_post_images_main_section',
+                array(
+                    'post_type' => $post_type->name,
+                    'enabled'   => in_array($post_type->name, $enabled_post_types),
+                )
+            );
+        }
+    }
+
+    // Render a checkbox for each post type
+    public function render_checkbox_field($args)
+    {
+    ?>
+<input type="checkbox" name="<?php echo esc_attr($this->option_name); ?>[]"
+    value="<?php echo esc_attr($args['post_type']); ?>" <?php checked($args['enabled']); ?>>
+<?php
+    }
+
+    // Delete images if the post type is enabled in settings
+    public function delete_images_on_post_delete($post_id)
+    {
+        $post_type = get_post_type($post_id);
+        $enabled_post_types = get_option($this->option_name, array());
+
+        if (! in_array($post_type, $enabled_post_types)) {
+            return;
+        }
+
+        // Delete attached media
+        $this->delete_attached_media($post_id);
+
+        // Delete featured image if it exists
+        $this->delete_featured_image($post_id);
+
+        // Delete images in post content
+        $this->delete_content_images($post_id);
+    }
+
+    private function delete_attached_media($post_id)
+    {
+        $attachments = get_attached_media('', $post_id);
+        foreach ($attachments as $attachment) {
+            wp_delete_attachment($attachment->ID, true);
+        }
+    }
+
+    private function delete_featured_image($post_id)
+    {
+        if (has_post_thumbnail($post_id)) {
+            wp_delete_attachment(get_post_thumbnail_id($post_id), true);
+        }
+    }
+
+    private function delete_content_images($post_id)
+    {
+        $post = get_post($post_id);
+        preg_match_all('/<img[^>]+src="([^">]+)"/', $post->post_content, $matches);
+
+        if (! empty($matches[1])) {
+            foreach ($matches[1] as $image_url) {
+                $attachment_id = attachment_url_to_postid($image_url);
+                if ($attachment_id) {
+                    wp_delete_attachment($attachment_id, true);
+                }
+            }
+        }
+    }
+}
+
+// Initialize the plugin
+new Delete_Post_Images_On_Delete();
